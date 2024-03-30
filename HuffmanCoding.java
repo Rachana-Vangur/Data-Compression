@@ -1,4 +1,6 @@
 import java.util.*;
+import java.lang.*;
+import java.nio.charset.StandardCharsets;
 import java.io.*;
 
 class TreeNode {
@@ -28,6 +30,7 @@ class Compressor {
     String text;
     TreeNode aNode, newNode;
     String compressedString;
+    String binCompressedString;
 
     Map<Character, String> encodedMap;
 
@@ -36,10 +39,6 @@ class Compressor {
             freq = new HashMap<>();
             pq = new PriorityQueue<>((a, b) -> a.freq - b.freq);
             encodedMap = new HashMap<>();
-            //
-            // Class cls = FileOperationsTest.class;
-            // InputStream inputStream = cls.getResourcesAsStream("./InputMessage.txt");
-            // text = readFromInputStream(inputStream);
             this.text = text;
         } catch (Exception e) {
             System.out.println("Error occured in Compressor");
@@ -83,19 +82,52 @@ class Compressor {
     }
 
     String getBinCompressedString() {
-        compressedString = "";
+        binCompressedString = "";
         for (int i = 0; i < text.length(); i++) {
             if (encodedMap.containsKey(text.charAt(i))) {
-                compressedString += encodedMap.get(text.charAt(i));
+                binCompressedString += encodedMap.get(text.charAt(i));
             } else {
                 System.out.println("Error");
             }
         }
-        return compressedString;
+        return binCompressedString;
     }
 
-    void getCompressedString() {
+    int getOffset() {
+        int offset = binCompressedString.length() % 8;
+        return offset;
+    }
 
+    String getCompressedString(String binCompressedString) {
+
+        List<Byte> byteArr = new ArrayList<>();
+        int offset = getOffset();
+        if (offset != 0) {
+
+            int add = 8 - offset;
+            for (int i = 0; i < add; i++) {
+                binCompressedString += "0";
+            }
+        }
+        for (int i = 0; i < binCompressedString.length() && i + 8 <= binCompressedString.length(); i += 8) {
+            int j = i;
+            byte num = 0;
+            while (j < i + 8) {
+                num *= 2;
+                if (binCompressedString.charAt(j) == '1') {
+                    num += 1;
+                }
+                j++;
+            }
+            // i = j;
+            byteArr.add(num);
+        }
+        byte[] byteArray = new byte[byteArr.size()];
+        for (int i = 0; i < byteArr.size(); i++) {
+            byteArray[i] = byteArr.get(i);
+        }
+        compressedString = new String(byteArray, StandardCharsets.ISO_8859_1);
+        return compressedString;
     }
 }
 
@@ -104,13 +136,27 @@ class Decompressor {
     String text;
     TreeNode encodingRootNode;
     int i;
+    String compressedString;
 
-    Decompressor(String text, TreeNode encodingRootNode) {
+    Decompressor(String compressedString, TreeNode encodingRootNode) {
         // opening file and copying the text into text variable
-        this.text = text;
+        this.compressedString = compressedString;
         this.encodingRootNode = encodingRootNode;
         decompressedString = "";
+        text = "";
         i = 0;
+    }
+
+    String getBinDecompressedString(String compressedString, int offset) {
+
+        String binaryString = new String();
+        for (int i = 0; i < compressedString.length(); i++) {
+            int j = (compressedString.charAt(i) + 256) % 256;
+            String x = String.format("%8s", Integer.toBinaryString(j)).replace(' ', '0');
+            binaryString += x;
+        }
+        text = binaryString.substring(0, binaryString.length() - (8 - offset));
+        return text;
     }
 
     String decompress(TreeNode root) {
@@ -146,17 +192,45 @@ class Decompressor {
         }
         return decompressedString;
     }
+
 }
 
 class HuffmanEncoding {
     public static void main(String[] args) {
-        Compressor c = new Compressor("Hello");
+
+        String text = "";
+        try {
+
+            FileReader fr = new FileReader("./InputMessage.txt");
+
+            BufferedReader br = new BufferedReader(fr);
+            String line;
+            while ((line = br.readLine()) != null) {
+                text += line;
+            }
+            br.close();
+
+        } catch (Exception e) {
+            System.out.println("Exception occured during reading a file");
+        }
+
+        Compressor c = new Compressor(text);
         c.enMap();
         TreeNode node = c.priority();
         c.compress(node, "");
-        System.out.println(c.getBinCompressedString());
+        String str1 = c.getCompressedString(c.getBinCompressedString());
+        int offset = c.getOffset();
 
-        Decompressor d = new Decompressor("1011000111", node);
-        System.out.println(d.decompress(node));
+        Decompressor d = new Decompressor(str1, node);
+
+        String str2 = d.getBinDecompressedString(str1, offset);
+        try {
+
+            FileWriter fw = new FileWriter("./OutputMessage.txt");
+            fw.write(d.decompress(node));
+            fw.close();
+        } catch (Exception e) {
+            System.out.println("Exception occured during writing a file");
+        }
     }
 }
